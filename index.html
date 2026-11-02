@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>내 가계부</title>
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16181b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="가계부">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside class="side">
+    <div class="brand"><img src="icon.svg" alt="">내 가계부</div>
+    <nav class="tabs">
+      <button data-tab="home" class="on"><span>●</span>홈</button>
+      <button data-tab="list"><span>≡</span>내역</button>
+      <button data-tab="income"><span>$</span>수입</button>
+      <button data-tab="settings"><span>⚙</span>설정</button>
+    </nav>
+    <button class="primary side-add" id="sideAdd">+ 기록 추가 <kbd>N</kbd></button>
+    <div class="side-foot"><span id="syncDot" class="sync"></span><span id="syncText"></span></div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <button class="mnav" id="prevM" aria-label="이전 달">‹</button>
+      <h1 id="monthLabel">—</h1>
+      <button class="mnav" id="nextM" aria-label="다음 달">›</button>
+      <button class="today-btn" id="todayM">이번 달</button>
+    </header>
+    <main id="view"></main>
+  </div>
+  <button id="fab" aria-label="추가">+</button>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-card" role="dialog" aria-modal="true">
+    <div class="seg" id="kindSeg">
+      <button data-kind="expense" class="on">지출</button>
+      <button data-kind="fixed">고정비</button>
+      <button data-kind="income">수입</button>
+    </div>
+    <div id="favBox"></div>
+    <div class="amt-row">
+      <span class="cur">$</span>
+      <input id="amt" inputmode="decimal" autocomplete="off" placeholder="0  (12.3+4.5 가능)">
+    </div>
+    <div class="amt-sum" id="amtSum">&nbsp;</div>
+    <div class="chips" id="catChips"></div>
+    <div class="row2">
+      <input id="date" type="date">
+      <input id="memo" placeholder="메모 (선택)">
+    </div>
+    <div class="sheet-actions">
+      <button id="delBtn" class="ghost danger" hidden>삭제</button>
+      <button id="dupBtn" class="ghost" hidden>오늘로 복제</button>
+      <button class="ghost" data-close>취소</button>
+      <button id="saveBtn" class="primary">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
