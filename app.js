@@ -27,7 +27,7 @@ const money = (v, sign = false) => {
   const s = Math.abs(v).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (v < 0 ? '−$' : (sign && v > 0 ? '+$' : '$')) + s;
 };
-const money0 = v => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString('en-AU');
+const money0 = v => money(v); // 모든 금액을 센트 단위까지 표시
 const r2 = v => Math.round(v * 100) / 100;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -214,11 +214,11 @@ function renderHome() {
     recent = `<div class="card a-recent"><div class="h2">오늘 <span class="label num">${money(todays.filter(t => t.kind !== 'income').reduce((a, t) => a + t.amount, 0))}</span></div>${todays.length ? todays.map(itemHTML).join('') : '<div class="empty">오늘 기록이 없어요. + 버튼으로 추가</div>'}</div>`;
   } else recent = '';
   view.innerHTML = `<div class="home-grid">${hero}
-    <div class="stats a-stats">
+    <div class="stats a-stats ${free ? 'n4' : 'n3'}">
       <div class="stat"><div class="label">지출</div><div class="v num">${money0(s.spend)}</div><div class="sub small">변동 ${money0(s.expense)} · 고정 ${money0(s.fixed)}</div></div>
       <div class="stat"><div class="label">수입</div><div class="v num">${money0(s.income)}</div><div class="sub small">${s.income ? `저축률 ${Math.round((s.income - s.spend) / s.income * 100)}%` : '&nbsp;'}</div></div>
-      ${free ? `<button class="stat free" id="freeTile"><div class="label">실제 여유 돈 ⓘ</div><div class="v num ${free.value < 0 ? 'neg' : ''}">${money0(free.value)}</div><div class="sub small">잔고 ${money0(free.bal)} − ${free.untilLabel} 고정비 ${money0(free.fixed)}</div></button>`
-        : `<div class="stat"><div class="label">월초 잔고</div><div class="v num ${opening < 0 ? 'neg' : ''}">${money0(opening)}</div><div class="sub small">월말 ${money0(remain)}</div></div>`}
+      <div class="stat budget"><div class="label">Budget${m < curM ? ' (월말)' : ''}</div><div class="v num ${remain < 0 ? 'neg' : ''}">${money(remain)}</div><div class="sub small">월초 ${money(opening)} + 수입 − 지출</div></div>
+      ${free ? `<button class="stat free" id="freeTile"><div class="label">실제 여유 돈 ⓘ</div><div class="v num ${free.value < 0 ? 'neg' : ''}">${money(free.value)}</div><div class="sub small">Budget − ${free.untilLabel} 고정비 ${money(free.fixed)}</div></button>` : ''}
     </div>
     ${wide() ? quickHTML() : ''}
     <div class="card a-cats"><div class="h2">카테고리별 <span class="label">${Object.keys(bud).length ? '예산 있는 항목은 사용/예산 · ' : ''}${m === curM ? '▲▼ 지난달 같은 날짜까지 대비' : '▲▼ 지난달 대비'}</span></div>${rows || '<div class="empty">이 달 지출이 없어요</div>'}</div>
@@ -263,7 +263,7 @@ function paceRow(title, sub, cur, avgTo, avgFull, n, unit) {
 }
 /** 지금 잔고 − (다음 페이일 전 / 페이일 미설정 시 이번 달 말까지) 나갈 반복 고정비 */
 function freeMoney() {
-  const today = todayStr(), bal = balanceThrough(today);
+  const today = todayStr(), m = ym(today), ms = sums(monthTx(m)), bal = r2(openingOf(m) + ms.income - ms.spend); // = 이번 달 Budget
   const pays = getJobs().map(j => payDate(j, 1, addDays(today, 1))).filter(Boolean).sort();
   const until = pays[0] ? addDays(pays[0], -1) : ym(today) + '-' + pad(daysInMonth(ym(today)));
   const items = [];
@@ -276,10 +276,11 @@ function freeMoney() {
 function freeExplain(f) {
   const s = S.settings;
   return `<h3>실제 여유 돈 = ${money(f.value)}</h3>
-    <div class="calc"><span class="k">현재 잔고</span><span class="v num">${money(f.bal)}</span>
+    <div class="calc"><span class="k">Budget (월초 + 수입 − 지출)</span><span class="v num">${money(f.bal)}</span>
     ${f.items.map(x => `<span class="k">− ${+x.d.slice(5, 7)}/${+x.d.slice(8)} ${esc(x.cat)}</span><span class="v num">−${money(x.amount)}</span>`).join('')}
     <span class="k tot">여유 돈</span><span class="v tot num">${money(f.value)}</span></div>
-    <p class="p">현재 잔고는 ${s.startDate} 시작 잔고 ${money(s.startBalance)}에 그 뒤 기록된 모든 수입·지출을 더하고 뺀 값이에요. 실제 은행 잔고와 다르면 설정의 잔고 기준점을 맞춰 주세요.</p>
+    <p class="p"><b>Budget</b>은 엑셀과 같은 방식이에요: 이번 달 월초 금액 + 이번 달 수입 − 이번 달 지출. 월초 금액은 ${s.startDate} 시작 잔고 ${money(s.startBalance)}부터 매달 이월된 값이에요. 실제 은행 잔고와 다르면 설정의 잔고 기준점을 맞춰 주세요.</p>
+    <p class="p"><b>실제 여유 돈</b>은 Budget에서 아직 안 나갔지만 곧 나갈 반복 고정비를 뺀 값이에요.</p>
     <p class="p">${f.payday ? `다음 페이일 ${f.payday} 전날까지 자동 등록될 반복 고정비를 뺐어요.` : '직장 페이일이 설정되지 않아 이번 달 말까지 나갈 반복 고정비를 뺐어요. 설정 → 직장에서 페이 주기를 넣으면 다음 페이일 기준으로 바뀌어요.'} 반복 고정비로 등록하지 않은 지출(전기·가스 등)은 포함되지 않아요.</p>`;
 }
 function alertBox(html) {
