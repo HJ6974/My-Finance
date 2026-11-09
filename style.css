@@ -391,3 +391,66 @@ body.locked .side .tabs{display:none}
   .xls thead tr.hd th{white-space:normal;line-height:1.2;vertical-align:bottom;font-size:12px}
   .main{padding:20px 28px 40px}
 }
+
+/* ───── 홈 v2 ───── */
+.home2{display:flex;flex-direction:column;gap:12px}
+.home2 .card{margin:0}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:left;min-width:0;font:inherit;color:inherit;box-shadow:var(--shadow)}
+@media (prefers-color-scheme: light){.kpi{border-color:transparent}}
+.kpi .kv{font-size:20px;font-weight:800;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.kpi .ks{font-size:12px;color:var(--sub);line-height:1.35}
+.kpi.k-var{box-shadow:inset 3px 0 0 var(--accent),var(--shadow)}
+.kpi.k-fix{box-shadow:inset 3px 0 0 #8b8f97,var(--shadow)}
+.kpi.k-save{box-shadow:inset 3px 0 0 var(--good),var(--shadow)}
+.kpi.k-bud{background:color-mix(in srgb,var(--accent) 10%,var(--card))}
+button.kpi{cursor:pointer} button.kpi:hover{border-color:var(--accent)}
+.pace-2{display:grid;gap:4px}
+.h-row{display:grid;gap:12px}
+.crow{display:grid;grid-template-columns:110px 1fr 84px 38px 96px;gap:8px;align-items:center;padding:7px 0;font-size:14px;border-top:1px solid var(--line)}
+.crow:first-of-type{border-top:0}
+.crow .cn{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow .cn i{width:8px;height:8px;border-radius:50%;flex:none}
+.crow .cv{text-align:right;font-weight:700}
+.crow .cp{text-align:right;color:var(--sub);font-size:12px}
+.crow .cdl{text-align:right;font-size:12px;color:var(--sub)}
+.crow .cdl.up{color:var(--warn)} .crow .cdl.down{color:var(--good)}
+.crow.over .cv,.crow.over .cdl{color:var(--warn)}
+.c-foot{display:flex;justify-content:space-between;padding-top:10px;margin-top:4px;border-top:2px solid var(--ink);font-size:14px}
+.mtab{width:100%;border-collapse:collapse;font-size:13px}
+.mtab th,.mtab td{padding:8px 6px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+.mtab thead th{font-size:12px;color:var(--sub);font-weight:500;border-top:0}
+.mtab tbody th{text-align:left;font-weight:600}
+.mtab .tv{font-weight:700}
+.mtab tbody tr{cursor:pointer}
+.mtab tbody tr:hover td,.mtab tbody tr:hover th{background:var(--chip)}
+.mtab tr.cur td,.mtab tr.cur th{background:color-mix(in srgb,var(--accent) 10%,var(--card))}
+@media (max-width:959px){
+  .crow{grid-template-columns:92px 1fr 76px 70px}
+  .crow .cp{display:none}
+  .mtab{font-size:11.5px} .mtab th,.mtab td{padding:7px 3px}
+  .kpi .kv{font-size:18px}
+}
+@media (min-width:960px){
+  .kpis.n6{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .kpis.n5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .pace-2{grid-template-columns:1fr 1fr;gap:28px}
+  .pace-2 .pace{border-top:0;padding:0}
+  .h-row{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:start}
+}
+
+.xls .cum{color:var(--sub);font-size:11.5px;background:color-mix(in srgb,var(--chip) 35%,var(--card))}
+.xls tr.wk td,.xls tr.wk th{background:color-mix(in srgb,var(--accent) 7%,var(--card));font-weight:700;border-bottom:2px solid var(--line)}
+.xls tr.wk th span{display:block;font-weight:400;font-size:10.5px}
+.xls tfoot span.up,.xls tfoot span.warnc{color:var(--warn);font-weight:700}
+.xls tfoot span.down{color:var(--good);font-weight:700}
+.xls tfoot tr.proj th,.xls tfoot tr.proj td{border-top:1px dashed var(--sub)}
+.xls tfoot{position:relative}
+.xls tfoot td,.xls tfoot th{position:static}
+@media (min-width:960px){
+  .xls th,.xls td{padding:6px 5px}
+  .xls td.c{min-width:50px}
+  .xls .cum{font-size:11px}
+  .xls thead tr.hd th{font-size:11.5px;word-break:break-word}
+  .xls .dcol{min-width:64px}
+}

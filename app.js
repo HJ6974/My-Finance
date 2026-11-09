@@ -1,6 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { FireStore } from './cloud.js';
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v15';
 
 /* ───────────── defaults ───────────── */
 const DEFAULT_SETTINGS = {
@@ -166,71 +166,62 @@ const wide = () => mq.matches;
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
 function renderHome() {
-  const m = S.month, s = sums(monthTx(m)), today = todayStr(), curM = ym(today);
-  const opening = openingOf(m), remain = r2(opening + s.income - s.spend);
-  let hero;
-  let free = null;
+  const m = S.month, s = sums(monthTx(m)), today = todayStr(), curM = ym(today), set = S.settings;
+  const opening = openingOf(m), budget = r2(opening + s.income - s.spend), saving = r2(s.income - s.spend);
+  const inc = monthTx(m).filter(t => t.kind === 'income'), kr = inc.filter(t => t.src === 'KR').reduce((a, t) => a + t.amount, 0), au = s.income - kr;
+  const pct = (a, b) => { if (!b) return '—'; const x = Math.round(a / b * 100); return (x < 0 ? '−' : '') + Math.abs(x) + '%'; };
+  const free = m === curM ? freeMoney() : null;
+  const kpi = (label, v, sub, cls = '', id = '') => `<${id ? `button id="${id}"` : 'div'} class="kpi ${cls}"><div class="label">${label}</div><div class="kv num ${v < 0 ? 'neg' : ''}">${money(v)}</div><div class="ks">${sub}</div></${id ? 'button' : 'div'}>`;
+  const kpis = [
+    kpi('수입', s.income, `KR ${money(kr)} · AU ${money(au)}`),
+    kpi('생활비', s.expense, `수입의 ${pct(s.expense, s.income)}`, 'k-var'),
+    kpi('고정비', s.fixed, `수입의 ${pct(s.fixed, s.income)}`, 'k-fix'),
+    kpi('저축', saving, `저축률 <b class="${saving < 0 ? 'neg' : 'pos'}">${pct(saving, s.income)}</b>`, 'k-save'),
+    kpi(m < curM ? 'Budget (월말)' : 'Budget', budget, `월초 ${money(opening)} + 수입 − 지출`, 'k-bud'),
+    free ? kpi('실제 여유 돈 ⓘ', free.value, `Budget − ${free.untilLabel} 고정비 ${money(free.fixed)}`, 'k-free', 'freeTile') : '',
+  ].join('');
+
+  // 페이스 (이번 달일 때만)
+  let pace = '';
   if (m === curM) {
     const w = weekPace(), mp = monthPace();
-    free = freeMoney();
-    hero = `<div class="card hero a-hero pace-card"><div class="h2">지출 페이스 <span class="label">생활비 기준 · 같은 시점끼리 비교</span></div>
-      ${paceRow('이번 주', `${+w.start.slice(5, 7)}/${+w.start.slice(8)}(월)~오늘 · ${w.k}일째`, w.cur, w.avgTo, w.avgFull, w.n, '주')}
-      ${paceRow('이번 달', `${parseD(today).getDate()}일째`, mp.cur, mp.avgTo, mp.avgFull, mp.n, '달')}</div>`;
-  } else if (m < curM) {
-    hero = `<div class="card hero a-hero"><div class="label">월말 잔고</div><div class="big num ${remain < 0 ? 'neg' : ''}">${money(remain)}</div>
-      <div class="note">이 달 저축 ${money(s.income - s.spend, true)}${s.income ? ` (${Math.round((s.income - s.spend) / s.income * 100)}%)` : ''}</div></div>`;
-  } else {
-    hero = `<div class="card hero a-hero"><div class="label">예상 시작 잔고</div><div class="big num">${money(opening)}</div><div class="note">아직 시작하지 않은 달이에요</div></div>`;
+    pace = `<div class="card pace-card h-pace"><div class="h2">생활비 페이스 <span class="label">같은 시점끼리 비교</span></div><div class="pace-2">
+      ${paceRow('이번 주', `${+w.start.slice(5, 7)}/${+w.start.slice(8)}(월)~오늘`, w.cur, w.avgTo, w.avgFull, w.n, '주')}
+      ${paceRow('이번 달', `${parseD(today).getDate()}일째`, mp.cur, mp.avgTo, mp.avgFull, mp.n, '달')}</div></div>`;
   }
+
+  // 생활비 카테고리 (고정비 제외)
   const pm = addMonths(m, -1), cut = m === curM ? pm + '-' + pad(Math.min(parseD(today).getDate(), daysInMonth(pm))) : pm + '-31';
   const prev = sums(monthTx(pm).filter(t => t.date <= cut));
-  const known = [...S.settings.categories, ...S.settings.fixedCats];
-  const cats = [...known, ...Object.keys(s.byCat).filter(c => !known.includes(c))];
-  const max = Math.max(1, ...cats.map(c => s.byCat[c] || 0));
-  const bud = S.settings.budgets || {};
-  const pace = m === curM ? parseD(today).getDate() / daysInMonth(m) : m < curM ? 1 : 0;
-  const rows = cats.filter(c => s.byCat[c] || bud[c]).sort((a, b) => (s.byCat[b] || 0) - (s.byCat[a] || 0)).map(c => {
-    const v = s.byCat[c] || 0, d = v - (prev.byCat[c] || 0), b = bud[c];
-    if (b) {
-      const over = v > b, ahead = !over && v > b * pace * 1.1;
-      return `<div class="bar-row budget ${over ? 'over' : ahead ? 'ahead' : ''}"><span class="name">${esc(c)}</span>
-        <div class="bar"><i style="width:${Math.min(v / b, 1) * 100}%;background:${over ? 'var(--warn)' : colorOf(c)}"></i>${pace > 0 && pace < 1 ? `<s style="left:${pace * 100}%" title="오늘까지 적정 사용량"></s>` : ''}</div>
-        <span class="amt num">${money0(v)}<span class="delta">/ ${money0(b)} · ${over ? `${money0(v - b)} 초과` : `${money0(b - v)} 남음`}</span></span>${wide() ? `<span class="pct num">${Math.round(v / b * 100)}%</span>` : ''}</div>`;
-    }
-    return `<div class="bar-row"><span class="name">${esc(c)}</span><div class="bar"><i style="width:${v / max * 100}%;background:${colorOf(c)}"></i></div>
-      <span class="amt num">${money0(v)}<span class="delta">${d >= 0 ? '▲' : '▼'}${money0(Math.abs(d))}</span></span>${wide() ? `<span class="pct num">${s.spend ? Math.round(v / s.spend * 100) : 0}%</span>` : ''}</div>`;
+  const bud = set.budgets || {}, pace01 = m === curM ? parseD(today).getDate() / daysInMonth(m) : m < curM ? 1 : 0;
+  const vc = [...set.categories, ...Object.keys(s.byCat).filter(c => !set.categories.includes(c) && !set.fixedCats.includes(c) && monthTx(m).some(t => t.kind === 'expense' && t.cat === c))];
+  const max = Math.max(1, ...vc.map(c => s.byCat[c] || 0));
+  const rows = vc.filter(c => s.byCat[c] || bud[c]).sort((a, b) => (s.byCat[b] || 0) - (s.byCat[a] || 0)).map(c => {
+    const v = s.byCat[c] || 0, d = v - (prev.byCat[c] || 0), b = bud[c], over = b && v > b;
+    const w = b ? Math.min(v / b, 1) * 100 : v / max * 100;
+    return `<div class="crow ${over ? 'over' : ''}"><span class="cn"><i style="background:${colorOf(c)}"></i>${esc(c)}</span>
+      <div class="bar"><i style="width:${w}%;background:${over ? 'var(--warn)' : colorOf(c)}"></i>${b && pace01 > 0 && pace01 < 1 ? `<s style="left:${pace01 * 100}%"></s>` : ''}</div>
+      <span class="cv num">${money(v)}</span><span class="cp num">${pct(v, s.expense)}</span>
+      <span class="cdl num ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${b ? `${over ? '초과 ' + money(v - b) : '남음 ' + money(b - v)}` : (d ? (d > 0 ? '▲' : '▼') + money(Math.abs(d)) : '—')}</span></div>`;
   }).join('');
-  const months = Array.from({ length: 6 }, (_, i) => addMonths(m, i - 5));
-  const ms = months.map(x => ({ x, ...sums(monthTx(x)) }));
-  const tmax = Math.max(1, ...ms.map(o => o.spend));
-  const trend = ms.map(o => `<button class="col ${o.x === m ? 'cur' : ''}" data-goto="${o.x}" title="${monthName(o.x)}: 생활비 ${money(o.expense)} · 고정비 ${money(o.fixed)} · 수입 ${money(o.income)}"><span class="t num">${o.spend ? money0(o.spend) : ''}</span>
-    <div class="stack" style="height:${o.spend / tmax * 85}%"><i style="flex:${o.expense};background:var(--accent)"></i><i style="flex:${o.fixed};background:${FIXED_COLOR}"></i></div>
-    <span class="m">${+o.x.slice(5)}월</span></button>`).join('');
-  let recent;
-  if (wide()) {
-    const list = monthTx(m).sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0)).slice(0, 10);
-    recent = `<div class="card a-recent"><div class="h2">최근 기록 <button class="link" data-tab-go="list">전체 보기 →</button></div>${list.length ? tableHTML(list) : '<div class="empty">이 달 기록이 없어요</div>'}</div>`;
-  } else if (m === curM) {
-    const todays = S.tx.filter(t => t.date === today);
-    recent = `<div class="card a-recent"><div class="h2">오늘 <span class="label num">${money(todays.filter(t => t.kind !== 'income').reduce((a, t) => a + t.amount, 0))}</span></div>${todays.length ? todays.map(itemHTML).join('') : '<div class="empty">오늘 기록이 없어요. + 버튼으로 추가</div>'}</div>`;
-  } else recent = '';
-  view.innerHTML = `<div class="home-grid">${hero}
-    <div class="stats a-stats ${free ? 'n4' : 'n3'}">
-      <div class="stat"><div class="label">생활비 지출</div><div class="v num">${money(s.expense)}</div><div class="sub small">고정비 ${money(s.fixed)} 별도 · 총 ${money(s.spend)}</div></div>
-      <div class="stat"><div class="label">수입</div><div class="v num">${money0(s.income)}</div><div class="sub small">${s.income ? `수입 대비 생활비 ${Math.round(s.expense / s.income * 100)}%` : '&nbsp;'}</div></div>
-      <div class="stat budget"><div class="label">Budget${m < curM ? ' (월말)' : ''}</div><div class="v num ${remain < 0 ? 'neg' : ''}">${money(remain)}</div><div class="sub small">월초 ${money(opening)} + 수입 − 지출</div></div>
-      ${free ? `<button class="stat free" id="freeTile"><div class="label">실제 여유 돈 ⓘ</div><div class="v num ${free.value < 0 ? 'neg' : ''}">${money(free.value)}</div><div class="sub small">Budget − ${free.untilLabel} 고정비 ${money(free.fixed)}</div></button>` : ''}
-    </div>
-    ${wide() ? quickHTML() : ''}
-    <div class="card a-cats"><div class="h2">카테고리별 <span class="label">${Object.keys(bud).length ? '예산 있는 항목은 사용/예산 · ' : ''}${m === curM ? '▲▼ 지난달 같은 날짜까지 대비' : '▲▼ 지난달 대비'}</span></div>${rows || '<div class="empty">이 달 지출이 없어요</div>'}</div>
-    <div class="card a-trend"><div class="h2">최근 6개월 지출</div><div class="trend">${trend}</div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>생활비</span><span><i style="background:${FIXED_COLOR}"></i>고정비</span></div></div>
-    ${reportHTML(m)}
-    ${recent}</div>`;
+
+  // 최근 6개월 표
+  const months = Array.from({ length: 6 }, (_, i) => addMonths(m, i - 5)).filter(x => monthTx(x).length);
+  const mrows = months.map(x => { const o = sums(monthTx(x)), sv = o.income - o.spend;
+    return `<tr class="${x === m ? 'cur' : ''}" data-goto="${x}"><th>${+x.slice(5)}월</th><td>${money(o.income)}</td><td class="tv">${money(o.expense)}</td><td>${money(o.fixed)}</td><td class="${sv < 0 ? 'neg' : ''}">${money(sv)}</td><td class="${sv < 0 ? 'neg' : 'pos'}"><b>${pct(sv, o.income)}</b></td></tr>`; }).join('');
+
+  view.innerHTML = `<div class="home2">
+    <div class="kpis ${free ? 'n6' : 'n5'}">${kpis}</div>
+    ${pace}
+    <div class="h-row">
+      <div class="card"><div class="h2">생활비 카테고리 <span class="label">${Object.keys(bud).length ? '예산 있는 항목은 남은 금액 · ' : ''}오른쪽: ${m === curM ? '지난달 같은 날짜까지 대비' : '지난달 대비'}</span></div>
+        ${rows || '<div class="empty">이 달 생활비 기록이 없어요</div>'}
+        <div class="c-foot"><span>생활비 합계</span><b class="num">${money(s.expense)}</b></div></div>
+      <div class="card"><div class="h2">월별 요약 <span class="label">달을 누르면 이동</span></div>
+        <table class="mtab num"><thead><tr><th></th><th>수입</th><th>생활비</th><th>고정비</th><th>저축</th><th>저축률</th></tr></thead><tbody>${mrows}</tbody></table></div>
+    </div></div>`;
   view.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { S.month = b.dataset.goto; render(); });
   $('#freeTile') && ($('#freeTile').onclick = () => alertBox(freeExplain(free)));
-  view.querySelectorAll('[data-tab-go]').forEach(b => b.onclick = () => { S.tab = b.dataset.tabGo; render(); });
-  bindItems(); bindQuick();
 }
 
 /* ───── 페이스 · 실제 여유 돈 ───── */
@@ -412,19 +403,54 @@ function renderSheet() {
   const s = sums(list), opening = openingOf(m), budget = r2(opening + s.income - s.spend);
   const kr = list.filter(t => t.kind === 'income' && t.src === 'KR').reduce((a, t) => a + t.amount, 0);
   const au = s.income - kr, bud = set.budgets || {};
-  const rows = days.map(d => {
+  let cum = 0, wk = null; const wkRows = [];
+  const newWk = () => ({ v: Object.fromEntries(vcols.map(c => [c, 0])), f: Object.fromEntries(fcols.map(c => [c, 0])), from: null, to: null });
+  const wkRow = w => { const vs = vcols.reduce((a, c) => a + w.v[c], 0), fs = fcols.reduce((a, c) => a + w.f[c], 0);
+    return `<tr class="wk"><th class="dcol">주 합계<span>${+w.from.slice(8)}~${+w.to.slice(8)}일</span></th>${vcols.map(c => `<td>${f2(w.v[c])}</td>`).join('')}<td class="sum">${f2(vs)}</td><td class="cum"></td><td class="gap"></td>${fcols.map(c => `<td class="fx">${f2(w.f[c])}</td>`).join('')}<td class="sum fsum">${f2(fs)}</td></tr>`; };
+  const rows = days.map((d, i) => {
     const dt = parseD(d), dow = dt.getDay(), v = vcols.reduce((a, c) => a + get(d, 'expense', c), 0), fx = fcols.reduce((a, c) => a + get(d, 'fixed', c), 0);
-    return `<tr class="${d === today ? 'today' : ''} ${d > today ? 'future' : ''} ${dow === 0 || dow === 6 ? 'we' : ''}">
+    cum += v; wk ||= newWk(); wk.from ||= d; wk.to = d;
+    vcols.forEach(c => wk.v[c] += get(d, 'expense', c)); fcols.forEach(c => wk.f[c] += get(d, 'fixed', c));
+    let out = `<tr class="${d === today ? 'today' : ''} ${d > today ? 'future' : ''} ${dow === 0 || dow === 6 ? 'we' : ''}">
       <th class="dcol">${dt.getDate()} <span>${WD[dow]}</span></th>
       ${vcols.map(c => { const x = get(d, 'expense', c); return `<td class="c" data-cell="${d}|expense|${esc(c)}">${f2(x)}</td>`; }).join('')}
-      <td class="sum">${f2(v)}</td>
+      <td class="sum">${f2(v)}</td><td class="cum">${d <= today ? f2(cum) : ''}</td>
       <td class="gap"></td>${fcols.map(c => { const x = get(d, 'fixed', c); return `<td class="c fx" data-cell="${d}|fixed|${esc(c)}">${f2(x)}</td>`; }).join('')}<td class="sum fsum">${f2(fx)}</td>
 </tr>`;
+    if ((dow === 0 || i === days.length - 1) && wk.from <= today) { out += wkRow(wk); }
+    if (dow === 0 || i === days.length - 1) wk = null;
+    return out;
   }).join('');
   const tot = vcols.map(colTot), vsum = tot.reduce((a, b) => a + b, 0), ftot = fcols.map(fixTot);
   const pv = vcols.map(c => pTot('expense', c)), pf = fcols.map(c => pTot('fixed', c));
   const hasBud = vcols.some(c => bud[c]);
-  const sumBox = [['월초 (Opening)', opening], ['수입 KR', kr], ['수입 AU', au], ['생활비', -s.expense], ['고정비', -s.fixed], ['총지출', -s.spend], ['저축 (수입−총지출)', s.income - s.spend], ['Budget', budget]];
+  // ── 아래 집계 줄들
+  const isCur = m === ym(today), dEl = isCur ? parseD(today).getDate() : dim;
+  const cmpCut = isCur ? pm + '-' + pad(Math.min(dEl, daysInMonth(pm))) : pm + '-31';
+  const cnt = (kind, c) => list.filter(t => t.kind === kind && t.cat === c && t.amount > 0).length;
+  const pCmp = (kind, c) => plist.filter(t => t.kind === kind && t.cat === c && t.date <= cmpCut).reduce((a, t) => a + t.amount, 0);
+  const fd = S.tx.reduce((a, t) => t.date < a ? t.date : a, '9999');
+  const avgMs = [1, 2, 3].map(i => addMonths(m, -i)).filter(x => x + '-01' >= fd.slice(0, 8) + '01' && monthTx(x).length);
+  const avg3 = (kind, c) => avgMs.length ? avgMs.reduce((a, x) => a + monthTx(x).filter(t => t.kind === kind && t.cat === c).reduce((b, t) => b + t.amount, 0), 0) / avgMs.length : 0;
+  const upFix = c => { let sum = 0; for (const r of set.recurring || []) if (r.cat === c) { let d = r.next, g = 0; while (d && ym(d) === m && g++ < 40) { if (d > today) sum += r.amount; d = nextDate(r, d); } } return sum; };
+  const pctf = (a, b) => b && a ? Math.round(a / b * 100) + '%' : '';
+  const dlt = d => Math.abs(d) < 0.005 ? '' : `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'}${f2(Math.abs(d))}</span>`;
+  const R = (label, vv, vs, fv, fs, cls = 'sub', title = '') => `<tr class="${cls}"><th class="dcol" title="${title}">${label}</th>${vv.map(x => `<td>${x}</td>`).join('')}<td class="sum">${vs}</td><td class="cum"></td><td class="gap"></td>${fv.map(x => `<td class="fx">${x}</td>`).join('')}<td class="sum fsum">${fs}</td></tr>`;
+  const vc = vcols.map(c => cnt('expense', c)), fcn = fcols.map(c => cnt('fixed', c));
+  const vcmp = vcols.map(c => pCmp('expense', c)), fcmp = fcols.map(c => pCmp('fixed', c));
+  const va3 = vcols.map(c => avg3('expense', c)), fa3 = fcols.map(c => avg3('fixed', c));
+  const sumA = a => a.reduce((x, y) => x + y, 0);
+  const vproj = tot.map(x => dEl ? x / dEl * dim : 0), fproj = fcols.map((c, i) => ftot[i] + upFix(c));
+  let foot = R('합계', tot.map(f2), f2(vsum), ftot.map(f2), f2(s.fixed), 'tot');
+  foot += R('횟수', vc.map(x => x ? x + '회' : ''), sumA(vc) ? sumA(vc) + '회' : '', fcn.map(x => x ? x + '회' : ''), sumA(fcn) ? sumA(fcn) + '회' : '', 'sub', '이 달 기록 건수');
+  foot += R('1회 평균', tot.map((x, i) => vc[i] ? f2(x / vc[i]) : ''), sumA(vc) ? f2(vsum / sumA(vc)) : '', ftot.map(() => ''), '', 'sub', '합계 ÷ 횟수');
+  foot += R('비중', tot.map(x => pctf(x, vsum)), '', ftot.map(x => pctf(x, s.fixed)), '');
+  foot += R(isCur ? '지난달 같은 날까지' : '지난달', vcmp.map(f2), f2(sumA(vcmp)), fcmp.map(f2), f2(sumA(fcmp)), 'sub', isCur ? `지난달 1일~${dEl}일` : '지난달 전체');
+  foot += R('증감', tot.map((x, i) => dlt(x - vcmp[i])), dlt(vsum - sumA(vcmp)), ftot.map((x, i) => dlt(x - fcmp[i])), dlt(s.fixed - sumA(fcmp)), 'sub dl');
+  if (avgMs.length) foot += R(`${avgMs.length}개월 평균`, va3.map(f2), f2(sumA(va3)), fa3.map(f2), f2(sumA(fa3)), 'sub', avgMs.map(x => +x.slice(5) + '월').join(', ') + ' 평균 (한 달 전체)');
+  if (isCur) foot += R('월말 예상', vproj.map((x, i) => `<span class="${va3[i] && x > va3[i] * 1.1 ? 'warnc' : ''}">${f2(x)}</span>`), `<span class="${sumA(va3) && sumA(vproj) > sumA(va3) * 1.1 ? 'warnc' : ''}">${f2(sumA(vproj))}</span>`, fproj.map(f2), f2(sumA(fproj)), 'sub proj', '생활비: 지금 속도대로 쓰면 / 고정비: 남은 반복 고정비 포함');
+  if (hasBud) foot += R('예산 남음', vcols.map((c, i) => bud[c] ? `<span class="${tot[i] > bud[c] ? 'warnc' : ''}">${tot[i] > bud[c] ? '−' : ''}${f2(Math.abs(bud[c] - tot[i])) || '0.00'}</span>` : ''), '', fcols.map(() => ''), '', 'sub', '예산 − 합계');
+  const sumBox = [['월초 (Opening)', opening], ['수입 KR', kr], ['수입 AU', au], ['생활비', -s.expense], ['고정비', -s.fixed], ['총지출', -s.spend], [`저축 · 저축률 ${s.income ? (s.income < s.spend ? '−' : '') + Math.abs(Math.round((s.income - s.spend) / s.income * 100)) + '%' : '—'}`, s.income - s.spend], ['Budget', budget]];
   view.innerHTML = `<div class="sheet-wrap">
     <div class="card sheet-top">
       <div class="usebar-h"><b>쓸 수 있던 돈 ${money(opening + s.income)} 중 <span class="${budget < 0 ? 'neg' : ''}">${money(s.spend)} 사용</span></b><span class="small">${opening + s.income > 0 ? Math.round(s.spend / (opening + s.income) * 100) + '%' : ''} · 남은 Budget ${money(budget)}</span></div>
@@ -432,14 +458,10 @@ function renderSheet() {
       <div class="legend"><span><i style="background:var(--accent)"></i>생활비 ${money(s.expense)}</span><span><i style="background:${FIXED_COLOR}"></i>고정비 ${money(s.fixed)}</span><span><i style="background:var(--chip);border:1px solid var(--line)"></i>남은 Budget</span></div>
       <div class="sheet-sum">${sumBox.map(([k, v], i) => `<div class="ss ${i === 7 ? 'hl' : ''}"><span>${k}</span><b class="num ${v < 0 ? 'neg' : ''}">${money(v)}</b></div>`).join('')}</div></div>
     <div class="card tbl-card"><div class="xls-scroll"><table class="xls">
-      <thead><tr class="grp"><th class="dcol"></th><th colspan="${vcols.length + 1}" class="g-var">생활비</th><th class="gap"></th><th colspan="${fcols.length + 1}" class="g-fix">고정비</th></tr>
-        <tr class="hd"><th class="dcol">날짜</th>${vcols.map(c => `<th><i style="background:${colorOf(c)}"></i>${esc(c)}</th>`).join('')}<th class="sum">생활비 합계</th><th class="gap"></th>${fcols.map(c => `<th class="fx">${esc(c)}</th>`).join('')}<th class="sum fsum">고정비 합계</th></tr></thead>
+      <thead><tr class="grp"><th class="dcol"></th><th colspan="${vcols.length + 2}" class="g-var">생활비</th><th class="gap"></th><th colspan="${fcols.length + 1}" class="g-fix">고정비</th></tr>
+        <tr class="hd"><th class="dcol">날짜</th>${vcols.map(c => `<th><i style="background:${colorOf(c)}"></i>${esc(c)}</th>`).join('')}<th class="sum">생활비 합계</th><th class="cum">누적</th><th class="gap"></th>${fcols.map(c => `<th class="fx">${esc(c)}</th>`).join('')}<th class="sum fsum">고정비 합계</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot>
-        <tr class="tot"><th class="dcol">합계</th>${tot.map(f2).map(x => `<td>${x}</td>`).join('')}<td class="sum">${f2(vsum)}</td><td class="gap"></td>${ftot.map(x => `<td class="fx">${f2(x)}</td>`).join('')}<td class="sum fsum">${f2(s.fixed)}</td></tr>
-        <tr class="sub"><th class="dcol">지난달</th>${pv.map(x => `<td>${f2(x)}</td>`).join('')}<td class="sum">${f2(pv.reduce((a, b) => a + b, 0))}</td><td class="gap"></td>${pf.map(x => `<td class="fx">${f2(x)}</td>`).join('')}<td class="sum fsum">${f2(pf.reduce((a, b) => a + b, 0))}</td></tr>
-        ${hasBud ? `<tr class="sub"><th class="dcol">예산</th>${vcols.map((c, i) => `<td class="${bud[c] && tot[i] > bud[c] ? 'over' : ''}">${bud[c] ? f2(bud[c]) : ''}</td>`).join('')}<td class="sum"></td><td class="gap"></td>${fcols.map(() => '<td class="fx"></td>').join('')}<td class="sum fsum"></td></tr>` : ''}
-        <tr class="sub"><th class="dcol">비중</th>${tot.map(x => `<td>${vsum ? Math.round(x / vsum * 100) + '%' : ''}</td>`).join('')}<td class="sum"></td><td class="gap"></td>${fcols.map(() => '<td class="fx"></td>').join('')}<td class="sum fsum"></td></tr>
+      <tfoot>${foot}
       </tfoot></table></div>
       <div class="small" style="padding:8px 4px 0">칸을 누르면 그날 그 항목의 기록을 보거나 추가할 수 있어요.</div></div></div>`;
   view.querySelectorAll('[data-cell]').forEach(td => td.onclick = () => {
@@ -739,10 +761,10 @@ function renderSettings() {
     try { await store.changePassword(a, S.settings); toast(was ? '비밀번호를 바꿨어요. 다른 기기에서는 새 비밀번호로 다시 열어야 해요' : '암호화를 켰어요. 다른 기기에서는 비밀번호를 입력해야 해요', 4000); render(); }
     catch (e) { toast('변경 실패: ' + (e.code || e.message), 5000); }
   });
-  $('#exp').onclick = () => download(`가계부_백업_${todayStr()}.json`, JSON.stringify({ version: 1, settings: s, transactions: S.tx }, null, 1), 'application/json');
+  $('#exp').onclick = () => download(`MyFinance_backup_${todayStr()}.json`, JSON.stringify({ version: 1, settings: s, transactions: S.tx }, null, 1), 'application/json');
   $('#csv').onclick = () => {
     const rows = [['date', 'kind', 'category', 'amount', 'source', 'memo'], ...[...S.tx].sort((a, b) => a.date.localeCompare(b.date)).map(t => [t.date, t.kind, t.cat, t.amount, t.src || '', t.memo || ''])];
-    download(`가계부_${todayStr()}.csv`, '﻿' + rows.map(r => r.map(x => /[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x).join(',')).join('\n'), 'text/csv');
+    download(`MyFinance_${todayStr()}.csv`, '﻿' + rows.map(r => r.map(x => /[",\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : x).join(',')).join('\n'), 'text/csv');
   };
   $('#imp').onclick = () => $('#impFile').click();
   $('#impFile').onchange = async e => {
@@ -904,7 +926,7 @@ function askPassword(mode, err = '') {
 
 function showLogin() {
   S.ready = false; render();
-  view.innerHTML = `<div class="login"><h2>내 가계부</h2><p>구글 계정으로 로그인하면<br>폰과 PC에서 같은 장부를 쓸 수 있어요.</p>
+  view.innerHTML = `<div class="login"><h2>My Finance</h2><p>구글 계정으로 로그인하면<br>폰과 PC에서 같은 장부를 쓸 수 있어요.</p>
     <button class="btn primary" id="loginBtn">Google로 로그인</button>
     <p class="small" style="margin-top:16px">기록은 로그인한 본인만 볼 수 있어요.</p></div>`;
   $('#loginBtn').onclick = () => store.login();
