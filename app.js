@@ -1,5 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { FireStore } from './cloud.js';
+const APP_VERSION = 'v11';
 
 /* ───────────── defaults ───────────── */
 const DEFAULT_SETTINGS = {
@@ -157,7 +158,7 @@ function render() {
   document.body.classList.toggle('wide', wide());
   document.body.classList.toggle('locked', !S.ready);
   if (!S.ready) return;
-  ({ home: renderHome, list: renderList, income: renderIncome, settings: renderSettings })[S.tab]();
+  ({ home: renderHome, sheet: renderSheet, list: renderList, income: renderIncome, settings: renderSettings })[S.tab]();
 }
 
 const mq = window.matchMedia('(min-width: 960px)');
@@ -392,6 +393,70 @@ function calHTML(m, list) {
     <div class="legend"><span>칸 색이 진할수록 변동비가 많은 날</span><span><i class="df"></i>고정비</span><span><i class="di"></i>수입</span></div></div>`;
 }
 
+/* ───── 월간표 (엑셀처럼 날짜 × 카테고리) ───── */
+function renderSheet() {
+  const m = S.month, today = todayStr(), dim = daysInMonth(m), list = monthTx(m), set = S.settings;
+  const known = [...set.categories, ...set.fixedCats];
+  const extraVar = [...new Set(list.filter(t => t.kind === 'expense' && !set.categories.includes(t.cat)).map(t => t.cat))];
+  const extraFix = [...new Set(list.filter(t => t.kind === 'fixed' && !set.fixedCats.includes(t.cat)).map(t => t.cat))];
+  const vcols = [...set.categories, ...extraVar], fcols = [...set.fixedCats, ...extraFix];
+  const cell = {}; // date|kind|cat → sum
+  for (const t of list) { const k = t.date + '|' + (t.kind === 'income' ? 'income' : t.kind) + '|' + (t.kind === 'income' ? '' : t.cat); cell[k] = (cell[k] || 0) + t.amount; }
+  const get = (d, kind, c = '') => cell[d + '|' + kind + '|' + c] || 0;
+  const days = Array.from({ length: dim }, (_, i) => m + '-' + pad(i + 1));
+  const f2 = v => v ? v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+  const colTot = c => list.filter(t => t.kind === 'expense' && t.cat === c).reduce((a, t) => a + t.amount, 0);
+  const fixTot = c => list.filter(t => t.kind === 'fixed' && t.cat === c).reduce((a, t) => a + t.amount, 0);
+  const pm = addMonths(m, -1), plist = monthTx(pm);
+  const pTot = (kind, c) => plist.filter(t => t.kind === kind && t.cat === c).reduce((a, t) => a + t.amount, 0);
+  const s = sums(list), opening = openingOf(m), budget = r2(opening + s.income - s.spend);
+  const kr = list.filter(t => t.kind === 'income' && t.src === 'KR').reduce((a, t) => a + t.amount, 0);
+  const au = s.income - kr, bud = set.budgets || {};
+  const rows = days.map(d => {
+    const dt = parseD(d), dow = dt.getDay(), v = vcols.reduce((a, c) => a + get(d, 'expense', c), 0), fx = fcols.reduce((a, c) => a + get(d, 'fixed', c), 0), inc = get(d, 'income');
+    return `<tr class="${d === today ? 'today' : ''} ${d > today ? 'future' : ''} ${dow === 0 || dow === 6 ? 'we' : ''}">
+      <th class="dcol">${dt.getDate()} <span>${WD[dow]}</span></th>
+      ${vcols.map(c => { const x = get(d, 'expense', c); return `<td class="c" data-cell="${d}|expense|${esc(c)}">${f2(x)}</td>`; }).join('')}
+      <td class="sum">${f2(v)}</td>
+      ${fcols.map(c => { const x = get(d, 'fixed', c); return `<td class="c fx" data-cell="${d}|fixed|${esc(c)}">${f2(x)}</td>`; }).join('')}
+      <td class="c inc" data-cell="${d}|income|">${f2(inc)}</td></tr>`;
+  }).join('');
+  const tot = vcols.map(colTot), vsum = tot.reduce((a, b) => a + b, 0), ftot = fcols.map(fixTot);
+  const pv = vcols.map(c => pTot('expense', c)), pf = fcols.map(c => pTot('fixed', c));
+  const hasBud = vcols.some(c => bud[c]);
+  const sumBox = [['월초 (Opening)', opening], ['수입 KR', kr], ['수입 AU', au], ['지출', -s.spend], ['저축', s.income - s.spend], ['Budget', budget]];
+  view.innerHTML = `<div class="sheet-wrap">
+    <div class="card sheet-top">
+      <div class="usebar-h"><b>쓸 수 있던 돈 ${money(opening + s.income)} 중 <span class="${budget < 0 ? 'neg' : ''}">${money(s.spend)} 사용</span></b><span class="small">${opening + s.income > 0 ? Math.round(s.spend / (opening + s.income) * 100) + '%' : ''} · 남은 Budget ${money(budget)}</span></div>
+      <div class="usebar"><i class="uv" style="width:${Math.min(100, (s.expense / Math.max(opening + s.income, s.spend, 1)) * 100)}%" title="변동비 ${money(s.expense)}"></i><i class="uf" style="width:${Math.min(100, (s.fixed / Math.max(opening + s.income, s.spend, 1)) * 100)}%" title="고정비 ${money(s.fixed)}"></i></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>변동비 ${money(s.expense)}</span><span><i style="background:${FIXED_COLOR}"></i>고정비 ${money(s.fixed)}</span><span><i style="background:var(--chip);border:1px solid var(--line)"></i>남은 Budget</span></div>
+      <div class="sheet-sum">${sumBox.map(([k, v], i) => `<div class="ss ${i === 5 ? 'hl' : ''}"><span>${k}</span><b class="num ${v < 0 ? 'neg' : ''}">${money(v)}</b></div>`).join('')}</div></div>
+    <div class="card tbl-card"><div class="xls-scroll"><table class="xls">
+      <thead><tr><th class="dcol">날짜</th>${vcols.map(c => `<th><i style="background:${colorOf(c)}"></i>${esc(c)}</th>`).join('')}<th class="sum">변동 합계</th>${fcols.map(c => `<th class="fx">${esc(c)}</th>`).join('')}<th class="inc">수입</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr class="tot"><th class="dcol">합계</th>${tot.map(f2).map(x => `<td>${x}</td>`).join('')}<td class="sum">${f2(vsum)}</td>${ftot.map(x => `<td class="fx">${f2(x)}</td>`).join('')}<td class="inc">${f2(s.income)}</td></tr>
+        <tr class="sub"><th class="dcol">지난달</th>${pv.map(x => `<td>${f2(x)}</td>`).join('')}<td class="sum">${f2(pv.reduce((a, b) => a + b, 0))}</td>${pf.map(x => `<td class="fx">${f2(x)}</td>`).join('')}<td class="inc">${f2(sums(plist).income)}</td></tr>
+        ${hasBud ? `<tr class="sub"><th class="dcol">예산</th>${vcols.map((c, i) => `<td class="${bud[c] && tot[i] > bud[c] ? 'over' : ''}">${bud[c] ? f2(bud[c]) : ''}</td>`).join('')}<td class="sum"></td>${fcols.map(() => '<td class="fx"></td>').join('')}<td class="inc"></td></tr>` : ''}
+        <tr class="sub"><th class="dcol">비중</th>${tot.map(x => `<td>${vsum ? Math.round(x / vsum * 100) + '%' : ''}</td>`).join('')}<td class="sum"></td>${fcols.map(() => '<td class="fx"></td>').join('')}<td class="inc"></td></tr>
+      </tfoot></table></div>
+      <div class="small" style="padding:8px 4px 0">칸을 누르면 그날 그 항목의 기록을 보거나 추가할 수 있어요.</div></div></div>`;
+  view.querySelectorAll('[data-cell]').forEach(td => td.onclick = () => {
+    const [d, kind, cat] = td.dataset.cell.split('|');
+    const items = S.tx.filter(t => t.date === d && t.kind === kind && (kind === 'income' || t.cat === cat));
+    if (!items.length) return openSheet(null, { date: d, kind, cat: kind === 'income' ? null : cat });
+    const label = `${+d.slice(5, 7)}/${+d.slice(8)} (${WD[parseD(d).getDay()]}) · ${kind === 'income' ? '수입' : esc(cat)}`;
+    alertBox(`<h3>${label}</h3><div class="pop-list">${items.map(itemHTML).join('')}</div>
+      <div class="small" style="margin-top:6px">합계 ${money(items.reduce((a, t) => a + t.amount, 0))} · 눌러서 수정</div>
+      <button class="outline btn" id="cellAdd" style="margin-top:10px">+ 이 칸에 추가</button>`);
+    const box = $('#infoBox');
+    box.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { box.hidden = true; openSheet(S.tx.find(t => t.id === b.dataset.id)); });
+    $('#cellAdd').onclick = () => { box.hidden = true; openSheet(null, { date: d, kind, cat: kind === 'income' ? null : cat }); };
+  });
+  // 오늘 줄로 스크롤
+  const tr = view.querySelector('tr.today'); if (tr && !wide()) tr.scrollIntoView({ block: 'center' });
+}
+
 function renderList() {
   const list = monthTx(S.month);
   const cats = ['all', 'income', 'fixed', ...S.settings.categories];
@@ -599,7 +664,7 @@ function renderSettings() {
       <input type="file" id="impFile" accept=".json,application/json" hidden>
       <button class="ghost danger btn" id="wipe" style="margin-top:12px">전체 데이터 삭제</button>
     </div>
-    </div></div><p class="small" style="text-align:center;margin:12px 0">기록 ${S.tx.length}건</p>`;
+    </div></div><p class="small" style="text-align:center;margin:12px 0">기록 ${S.tx.length}건 · 앱 버전 ${APP_VERSION}</p>`;
   const v = id => $(id).value;
   $('#rFreq').onchange = () => {
     const w = v('#rFreq') === 'weekly';
@@ -711,19 +776,19 @@ function drawChips() {
   document.querySelectorAll('#kindSeg button').forEach(b => b.classList.toggle('on', b.dataset.kind === S.kind));
 }
 function updSum() { const v = $('#amt').value, x = evalAmt(v); $('#amtSum').innerHTML = /[+-]/.test(v.replace(/^-/, '')) ? (x === null ? '계산할 수 없는 식' : `= ${money(x)}`) : '&nbsp;'; }
-function openSheet(t) {
+function openSheet(t, pre = {}) {
   S.editing = t || null;
-  S.kind = t?.kind || 'expense';
-  S.cat = t ? (t.kind === 'income' ? (t.src || 'AU') : t.cat) : null;
+  S.kind = t?.kind || pre.kind || 'expense';
+  S.cat = t ? (t.kind === 'income' ? (t.src || 'AU') : t.cat) : (pre.cat || null);
   $('#amt').value = t ? (t.expr || t.amount) : '';
-  $('#date').value = t?.date || (S.month === ym(todayStr()) ? todayStr() : S.month + '-01');
+  $('#date').value = t?.date || pre.date || (S.month === ym(todayStr()) ? todayStr() : S.month + '-01');
   $('#memo').value = t?.memo || '';
   $('#delBtn').hidden = !t; $('#dupBtn').hidden = !t;
   $('#favBox').innerHTML = t ? '' : favHTML();
   $('#favBox').querySelectorAll('[data-fav]').forEach(b => b.onclick = async () => { const d = $('#date').value; closeSheet(); await addFav(b, d); });
   $('#kindSeg').style.display = t?.pay ? 'none' : '';
   drawChips(); updSum();
-  $('#favBox').hidden = S.kind !== 'expense';
+  $('#favBox').hidden = S.kind !== 'expense' || !!pre.cat;
   $('#sheet').hidden = false;
   if (!t) setTimeout(() => $('#amt').focus(), 60);
 }
@@ -747,7 +812,8 @@ async function saveSheet() {
 
 /* ───────────── boot ───────────── */
 function bindChrome() {
-  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; try { localStorage.setItem('fin-tab', S.tab); } catch {} render(); window.scrollTo(0, 0); });
+  try { const t = localStorage.getItem('fin-tab'); if (t && document.querySelector(`.tabs [data-tab="${t}"]`)) S.tab = t; else if (wide()) S.tab = 'sheet'; } catch { if (wide()) S.tab = 'sheet'; }
   $('#prevM').onclick = () => { S.month = addMonths(S.month, -1); render(); };
   $('#nextM').onclick = () => { S.month = addMonths(S.month, 1); render(); };
   $('#fab').onclick = () => openSheet();
