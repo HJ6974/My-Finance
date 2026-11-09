@@ -374,3 +374,20 @@ body.locked .side .tabs{display:none}
 .usebar .uv{background:var(--accent)} .usebar .uf{background:#8b8f97}
 .sheet-top .sheet-sum{padding:10px 0 0;margin:0}
 @media (max-width:959px){.ss b{font-size:14px;overflow:visible;text-overflow:clip}.ss{padding:7px 8px}}
+
+.xls .gap{background:var(--bg)!important;border:0!important;min-width:14px;width:14px;padding:0!important}
+.xls thead tr.grp th{top:0;height:28px;font-size:12px;font-weight:700;color:var(--ink);border-bottom:2px solid var(--line)}
+.xls thead tr.hd th{top:28px}
+.xls .g-var{background:color-mix(in srgb,var(--accent) 16%,var(--chip))!important}
+.xls .g-fix{background:color-mix(in srgb,#8b8f97 22%,var(--chip))!important}
+.xls .fsum{background:color-mix(in srgb,#8b8f97 14%,var(--card))}
+.sheet-sum{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:600px){.sheet-sum{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (min-width:1200px){.sheet-sum{grid-template-columns:repeat(8,minmax(0,1fr))}.ss b{font-size:16px}}
+@media (min-width:960px){
+  .xls{font-size:12.5px;width:100%}
+  .xls th,.xls td{padding:6px 7px}
+  .xls td.c{min-width:56px}
+  .xls thead tr.hd th{white-space:normal;line-height:1.2;vertical-align:bottom;font-size:12px}
+  .main{padding:20px 28px 40px}
+}
