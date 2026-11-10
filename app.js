@@ -1,6 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { FireStore } from './cloud.js';
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 
 /* ───────────── defaults ───────────── */
 const DEFAULT_SETTINGS = {
@@ -176,7 +176,7 @@ function renderHome() {
     kpi('수입', s.income, `KR ${money(kr)} · AU ${money(au)}`),
     kpi('생활비', s.expense, `수입의 ${pct(s.expense, s.income)}`, 'k-var'),
     kpi('고정비', s.fixed, `수입의 ${pct(s.fixed, s.income)}`, 'k-fix'),
-    kpi('저축', saving, `저축률 <b class="${saving < 0 ? 'neg' : 'pos'}">${pct(saving, s.income)}</b>`, 'k-save'),
+    kpi(`저축 (${pct(saving, s.income)})`, saving, '수입 − 생활비 − 고정비', 'k-save'),
     kpi(m < curM ? 'Budget (월말)' : 'Budget', budget, `월초 ${money(opening)} + 수입 − 지출`, 'k-bud'),
     free ? kpi('실제 여유 돈 ⓘ', free.value, `Budget − ${free.untilLabel} 고정비 ${money(free.fixed)}`, 'k-free', 'freeTile') : '',
   ].join('');
@@ -450,7 +450,7 @@ function renderSheet() {
   if (avgMs.length) foot += R(`${avgMs.length}개월 평균`, va3.map(f2), f2(sumA(va3)), fa3.map(f2), f2(sumA(fa3)), 'sub', avgMs.map(x => +x.slice(5) + '월').join(', ') + ' 평균 (한 달 전체)');
   if (isCur) foot += R('월말 예상', vproj.map((x, i) => `<span class="${va3[i] && x > va3[i] * 1.1 ? 'warnc' : ''}">${f2(x)}</span>`), `<span class="${sumA(va3) && sumA(vproj) > sumA(va3) * 1.1 ? 'warnc' : ''}">${f2(sumA(vproj))}</span>`, fproj.map(f2), f2(sumA(fproj)), 'sub proj', '생활비: 지금 속도대로 쓰면 / 고정비: 남은 반복 고정비 포함');
   if (hasBud) foot += R('예산 남음', vcols.map((c, i) => bud[c] ? `<span class="${tot[i] > bud[c] ? 'warnc' : ''}">${tot[i] > bud[c] ? '−' : ''}${f2(Math.abs(bud[c] - tot[i])) || '0.00'}</span>` : ''), '', fcols.map(() => ''), '', 'sub', '예산 − 합계');
-  const sumBox = [['월초 (Opening)', opening], ['수입 KR', kr], ['수입 AU', au], ['생활비', -s.expense], ['고정비', -s.fixed], ['총지출', -s.spend], [`저축 · 저축률 ${s.income ? (s.income < s.spend ? '−' : '') + Math.abs(Math.round((s.income - s.spend) / s.income * 100)) + '%' : '—'}`, s.income - s.spend], ['Budget', budget]];
+  const sumBox = [['월초 (Opening)', opening], ['수입 KR', kr], ['수입 AU', au], ['생활비', -s.expense], ['고정비', -s.fixed], ['총지출', -s.spend], [`저축 (${s.income ? (s.income < s.spend ? '−' : '') + Math.abs(Math.round((s.income - s.spend) / s.income * 100)) + '%' : '—'})`, s.income - s.spend], ['Budget', budget]];
   view.innerHTML = `<div class="sheet-wrap">
     <div class="card sheet-top">
       <div class="usebar-h"><b>쓸 수 있던 돈 ${money(opening + s.income)} 중 <span class="${budget < 0 ? 'neg' : ''}">${money(s.spend)} 사용</span></b><span class="small">${opening + s.income > 0 ? Math.round(s.spend / (opening + s.income) * 100) + '%' : ''} · 남은 Budget ${money(budget)}</span></div>
